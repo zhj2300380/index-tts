@@ -893,10 +893,11 @@ def get_pip_command():
     # 检查 uv 是否可用
     uv_path = shutil.which("uv")
     if uv_path:
-        return ["uv", "pip", "--python", G_PYTHON_EXECUTABLE], True
+        # uv pip install --python <path> <packages>
+        return ["uv", "pip", "install", "--python", G_PYTHON_EXECUTABLE], True
 
     # 回退到 python -m pip
-    return [G_PYTHON_EXECUTABLE, "-m", "pip"], False
+    return [G_PYTHON_EXECUTABLE, "-m", "pip", "install"], False
 
 
 # PyTorch 相关包（需要从专门的 CUDA 源安装）
@@ -910,7 +911,7 @@ def get_pip_install_args(package_names, upgrade=False, use_torch_index=False, is
     如果 use_torch_index=True，添加 PyTorch CUDA 源。
     如果 is_uv=True，使用 uv 的参数格式。
     """
-    args = ["install"]
+    args = []
     if upgrade:
         args.append("--upgrade")
 
