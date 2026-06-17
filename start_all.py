@@ -38,6 +38,9 @@ VENV_NAME = ".venv"
 # 项目根目录（脚本所在目录）
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
+# 网络环境（与 download_all.py 保持一致）
+G_IN_CHINA = True  # 是否在中国大陆网络环境（默认 true）
+
 
 # ==================== 工具函数 ====================
 
@@ -164,11 +167,19 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
         print(f"  尝试 get-pip.py...")
 
     # 策略 2: 下载并运行 get-pip.py（多源回退）
-    get_pip_sources = [
-        ("bootstrap.pypa.io", "https://bootstrap.pypa.io/get-pip.py"),
-        ("阿里云", "https://mirrors.aliyun.com/pypi/packages/get-pip.py"),
-        ("清华大学", "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/get-pip.py"),
-    ]
+    # 根据网络环境选择下载源顺序
+    if G_IN_CHINA:
+        get_pip_sources = [
+            ("阿里云", "https://mirrors.aliyun.com/pypi/packages/get-pip.py"),
+            ("清华大学", "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/get-pip.py"),
+            ("bootstrap.pypa.io", "https://bootstrap.pypa.io/get-pip.py"),
+        ]
+    else:
+        get_pip_sources = [
+            ("bootstrap.pypa.io", "https://bootstrap.pypa.io/get-pip.py"),
+            ("阿里云", "https://mirrors.aliyun.com/pypi/packages/get-pip.py"),
+            ("清华大学", "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/get-pip.py"),
+        ]
 
     get_pip_path = os.path.join(PROJECT_ROOT, ".get-pip.py")
     downloaded = False
@@ -358,6 +369,38 @@ def print_help():
     print()
 
 
+def parse_in_china():
+    """
+    解析命令行中的 in_china 参数。
+
+    与 download_all.py 保持一致：
+    - 默认 True（中国大陆）
+    - 传入 false/0/no 表示海外
+
+    返回:
+        (in_china: bool, download_args: list)
+        in_china: 网络环境标识
+        download_args: 传递给 download_all.py 的参数列表
+    """
+    global G_IN_CHINA
+
+    download_args = []
+    args = sys.argv[1:]
+
+    # 分离 in_china 参数和其他参数
+    in_china_found = False
+    for arg in args:
+        if arg.lower() in ("false", "0", "no"):
+            G_IN_CHINA = False
+            download_args.append("false")
+            in_china_found = True
+        elif not in_china_found:
+            # 其他参数原样传递
+            download_args.append(arg)
+
+    return G_IN_CHINA, download_args
+
+
 def main():
     """主函数"""
     # 检查帮助参数
@@ -366,7 +409,14 @@ def main():
         print_help()
         sys.exit(0)
 
+    # 解析网络环境参数
+    in_china, download_args = parse_in_china()
+
     print_banner()
+
+    # 显示网络环境
+    print(f"  网络环境:    {'中国大陆' if in_china else '海外'}")
+    print()
 
     # 步骤 1/5: 检查 Python 版本
     print("[步骤 1/5] 检查 Python 版本")
@@ -425,9 +475,8 @@ def main():
     print("[步骤 5/5] 开始部署")
     print()
 
-    # 传递所有命令行参数给 download_all.py
-    # sys.argv[1:] 包含用户传入的所有参数
-    run_download_script(sys.argv[1:])
+    # 传递参数给 download_all.py
+    run_download_script(download_args)
 
 
 if __name__ == "__main__":
