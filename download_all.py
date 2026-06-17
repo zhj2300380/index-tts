@@ -73,6 +73,25 @@ def ask_continue(prompt="是否继续? (y/N): "):
         print("\n  ⊘ 用户取消")
         return False
 
+
+def format_duration(seconds: float) -> str:
+    """
+    格式化时间间隔为可读字符串。
+
+    例如：3661.5 → 1小时1分1.5秒
+    """
+    if seconds < 60:
+        return f"{seconds:.1f}秒"
+    elif seconds < 3600:
+        minutes = int(seconds // 60)
+        secs = seconds % 60
+        return f"{minutes}分{secs:.1f}秒"
+    else:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        return f"{hours}小时{minutes}分{secs:.1f}秒"
+
 # --- 硬件信息 ---
 G_RAM_TOTAL = None        # 总内存 (bytes)
 G_RAM_AVAILABLE = None    # 可用内存 (bytes)
@@ -2242,24 +2261,51 @@ def main():
         print("=" * 60)
         sys.exit(1)
 
+    # 记录总开始时间
+    import time as _total_time
+    total_start = _total_time.time()
+
     # 环境检测
     init_env(G_MODEL_DIR)
 
     # 安装缺失的包（除非用户指定 --no-install）
     if not args.no_install:
+        step_start = _total_time.time()
         install_missing_packages()
+        step_elapsed = _total_time.time() - step_start
+        print(f"  [依赖包安装] 耗时: {format_duration(step_elapsed)}")
+        print()
 
     # 下载主模型（除非用户指定 --skip-model）
     if not args.skip_model:
+        step_start = _total_time.time()
         download_main_model(G_MODEL_DIR, force=args.force)
+        step_elapsed = _total_time.time() - step_start
+        print(f"  [主模型下载] 耗时: {format_duration(step_elapsed)}")
+        print()
 
     # 下载辅助模型（除非用户指定 --skip-model）
     if not args.skip_model:
+        step_start = _total_time.time()
         download_aux_models(G_CACHE_DIR, force=args.force)
+        step_elapsed = _total_time.time() - step_start
+        print(f"  [辅助模型下载] 耗时: {format_duration(step_elapsed)}")
+        print()
 
     # 下载示例音频（除非用户指定 --skip-examples）
     if not args.skip_examples:
+        step_start = _total_time.time()
         download_example_audio(G_EXAMPLES_DIR, force=args.force)
+        step_elapsed = _total_time.time() - step_start
+        print(f"  [示例音频下载] 耗时: {format_duration(step_elapsed)}")
+        print()
+
+    # 总耗时
+    total_elapsed = _total_time.time() - total_start
+    print("=" * 60)
+    print(f"  全部完成！总耗时: {format_duration(total_elapsed)}")
+    print("=" * 60)
+    print()
 
 
 if __name__ == "__main__":
