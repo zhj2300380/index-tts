@@ -1586,7 +1586,7 @@ def _download_from_modelscope_file(model_id: str, file_path: str, local_path: st
 
 
 def _download_file_http(url: str, local_path: str, timeout: int = 300,
-                         max_retries: int = 3, chunk_size: int = 65536) -> bool:
+       max_retries: int = 3, chunk_size: int = 65536) -> bool:
     """
     通过 HTTP 下载单个文件，支持断点续传、自动重试和进度显示。
     """
@@ -1601,6 +1601,9 @@ def _download_file_http(url: str, local_path: str, timeout: int = 300,
 
     tmp_path = str(local_path) + ".tmp"
     last_error = None
+
+    # 显示下载 URL（方便排查问题）
+    print(f"     URL: {url}")
 
     for attempt in range(1, max_retries + 1):
         # 检查是否有未完成的下载（断点续传）
