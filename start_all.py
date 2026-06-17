@@ -170,9 +170,9 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
     # 根据网络环境选择下载源顺序
     if G_IN_CHINA:
         get_pip_sources = [
+            ("bootstrap.pypa.io", "https://bootstrap.pypa.io/get-pip.py"),
             ("阿里云", "https://mirrors.aliyun.com/pypi/packages/get-pip.py"),
             ("清华大学", "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/get-pip.py"),
-            ("bootstrap.pypa.io", "https://bootstrap.pypa.io/get-pip.py"),
         ]
     else:
         get_pip_sources = [
@@ -192,9 +192,10 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
                 with open(get_pip_path, "wb") as f:
                     f.write(response.read())
             downloaded = True
-            print(f"  ✓ 下载完成")
+            print(f"  ✓ 从 {source_name} 下载完成")
             break
         except Exception:
+            print(f"  ✗ {source_name} 下载失败")
             continue
 
     if not downloaded:
