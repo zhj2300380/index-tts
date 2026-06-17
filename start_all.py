@@ -214,6 +214,10 @@ def create_virtualenv():
         builder = venv.EnvBuilder(with_pip=True, symlinks=False)
         builder.create(venv_path)
         print(f"  ✓ 虚拟环境创建完成 (venv)")
+        # 统一确保 pip 可用（某些最小化系统可能 pip 未正确安装）
+        venv_python = get_venv_python_path()
+        if os.path.isfile(venv_python):
+            ensure_pip_in_venv(venv_python)
         return True
     except Exception as e:
         print(f"  ✗ 虚拟环境创建失败: {e}")
