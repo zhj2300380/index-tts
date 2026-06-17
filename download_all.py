@@ -1024,7 +1024,7 @@ def install_project_from_pyproject():
          - uv 自动解析 pyproject.toml 中所有依赖
          - uv 自动使用 [[tool.uv.index]] 和 [tool.uv.sources] 配置
            处理 PyTorch CUDA 索引（cu128）
-         - 国内环境通过 UV_INDEX_URL 环境变量设置阿里云镜像
+         - 国内环境通过 UV_DEFAULT_INDEX 环境变量设置阿里云镜像
            （不影响 explicit 索引，torch/torchaudio 仍走 PyTorch CUDA 源）
       2. 回退到 pip install -e ".[webui]"
          - 手动传递 --extra-index-url 处理 PyTorch CUDA
@@ -1069,12 +1069,12 @@ def _install_with_uv_sync(project_root):
         # 设置默认镜像源为阿里云
         # pyproject.toml 中的 [[tool.uv.index]] explicit=true 索引不受影响
         # torch/torchaudio 仍走 PyTorch CUDA 源 (cu128)
-        env["UV_INDEX_URL"] = "https://mirrors.aliyun.com/pypi/simple/"
+        env["UV_DEFAULT_INDEX"] = "https://mirrors.aliyun.com/pypi/simple/"
 
     print(f"  使用 uv sync 安装项目依赖 (更快)")
     print(f"  执行: {' '.join(cmd)}")
     if G_IN_CHINA:
-        print(f"  镜像源:  UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/")
+        print(f"  镜像源:  UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/")
     print(f"  开始安装...")
     print(f"  {'─' * 52}")
 
