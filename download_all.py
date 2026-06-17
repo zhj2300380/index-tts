@@ -923,125 +923,40 @@ def print_env_info():
 #  安装缺失的包和下载工具
 # ============================================================================
 
-def get_pip_command():
-    """
-    获取当前 Python 环境对应的 pip 命令。
-
-    策略：
-      1. 优先使用 uv pip（更快）
-      2. 回退到 python -m pip
-
-    返回:
-        (command: list, is_uv: bool)
-        command: pip 命令列表
-        is_uv: 是否使用 uv
-    """
-    # 检查 uv 是否可用
-    uv_path = shutil.which("uv")
-    if uv_path:
-        # uv pip install --python <path> <packages>
-        return ["uv", "pip", "install", "--python", G_PYTHON_EXECUTABLE], True
-
-    # 回退到 python -m pip
-    return [G_PYTHON_EXECUTABLE, "-m", "pip", "install"], False
-
-
 # PyTorch 相关包（需要从专门的 CUDA 源安装）
 PYTORCH_CUDA_PACKAGES = {"torch", "torchaudio", "torchvision"}
 
 
-def get_pip_install_args(package_names, upgrade=False, use_torch_index=False, is_uv=False):
+def _run_subprocess_with_progress(cmd, cwd=None, env=None):
     """
-    构建 pip install 命令参数。
-    根据 G_IN_CHINA 决定是否使用阿里云镜像源。
-    如果 use_torch_index=True，添加 PyTorch CUDA 源。
-    如果 is_uv=True，使用 uv 的参数格式。
-    """
-    args = []
-    if upgrade:
-        args.append("--upgrade")
+    运行子进程并实时显示输出进度。
 
-    if G_IN_CHINA:
-        if is_uv:
-            # uv 使用 --index-url 和 --index-extra-url
-            args.extend([
-                "--index-url",
-                "https://mirrors.aliyun.com/pypi/simple/",
-            ])
-        else:
-            args.extend([
-                "--index-url",
-                "https://mirrors.aliyun.com/pypi/simple/",
-                "--trusted-host",
-                "mirrors.aliyun.com",
-            ])
-
-    # 如果需要 PyTorch CUDA 源
-    if use_torch_index and G_RECOMMENDED_TORCH_INDEX:
-        if is_uv:
-            args.extend([
-                "--extra-index-url",
-                G_RECOMMENDED_TORCH_INDEX,
-                "--index-strategy",
-                "unsafe-best-match",
-            ])
-        else:
-            args.extend([
-                "--extra-index-url",
-                G_RECOMMENDED_TORCH_INDEX,
-            ])
-
-    args.extend(package_names)
-    return args
-
-
-def install_packages_with_progress(package_names, upgrade=False, use_torch_index=False):
-    """
-    安装包并显示实时进度。
-
-    策略：
-      - 优先使用 uv pip（更快）
-      - 回退到 python -m pip
-      - 实时输出 pip 的每一行日志（用户可以看到正在做什么）
-      - 每行前面添加时间戳和进度指示
-      - 如果超过 60 秒没有新输出，显示警告提示
+    通用工具函数，被 _install_with_uv_sync 和 _install_with_pip 复用。
 
     参数：
-        package_names: 要安装的包名列表
-        upgrade: 是否升级已安装的包
-        use_torch_index: 是否添加 PyTorch CUDA 源
+        cmd: 命令列表
+        cwd: 工作目录
+        env: 环境变量字典（None 表示继承当前环境）
 
     返回：
-        True 如果全部安装成功，False 如果有失败
+        True 如果执行成功，False 如果失败
     """
     import time as _time
-
-    pip_cmd, is_uv = get_pip_command()
-    install_args = get_pip_install_args(package_names, upgrade=upgrade, use_torch_index=use_torch_index, is_uv=is_uv)
-    full_cmd = pip_cmd + install_args
-
-    if is_uv:
-        print(f"  使用 uv pip 安装 (更快)")
-    else:
-        print(f"  使用 python -m pip 安装")
-
-    print(f"  执行: {' '.join(full_cmd)}")
-    print(f"  开始安装 {len(package_names)} 个包...")
-    print(f"  {'─' * 52}")
-
-    # 启动 subprocess 捕获输出
-    process = subprocess.Popen(
-        full_cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
 
     start_time = _time.time()
     last_output_time = start_time
     line_count = 0
     warning_shown = False
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        cwd=cwd,
+        env=env,
+    )
 
     try:
         for line in process.stdout:
@@ -1064,10 +979,8 @@ def install_packages_with_progress(package_names, upgrade=False, use_torch_index
             if idle_time > 60 and not warning_shown:
                 print(f"  ⚠ 注意: 已等待 {idle_time:.0f} 秒无新输出，可能正在下载大文件...")
                 warning_shown = True
-                # 重置警告标志，下次再等 60 秒
                 last_output_time = _time.time()
 
-            # 输出格式: [时间] 行号: 内容
             # 截断过长的行
             if len(line) > 120:
                 line = line[:117] + "..."
@@ -1081,10 +994,9 @@ def install_packages_with_progress(package_names, upgrade=False, use_torch_index
         print(f"  总耗时: {total_time:.1f} 秒")
 
         if process.returncode == 0:
-            print(f"  ✓ 成功安装 {len(package_names)} 个包")
             return True
         else:
-            print(f"  ✗ 安装失败 (退出码: {process.returncode})")
+            print(f"  ✗ 执行失败 (退出码: {process.returncode})")
             return False
 
     except KeyboardInterrupt:
@@ -1092,16 +1004,149 @@ def install_packages_with_progress(package_names, upgrade=False, use_torch_index
         print("\n  ⊘ 安装被用户中断")
         return False
     except Exception as e:
-        print(f"\n  ✗ 安装异常: {e}")
+        print(f"\n  ✗ 执行异常: {e}")
+        return False
+
+
+def install_project_from_pyproject():
+    """
+    从 pyproject.toml 安装完整项目依赖。
+
+    不再逐个安装包，而是直接读取 pyproject.toml 安装全部依赖。
+    优势：
+      - 零维护：pyproject.toml 改了，安装自动生效
+      - 支持平台条件依赖（wetext vs WeTextProcessing）
+      - 支持可选依赖（webui 含 gradio）
+      - uv sync 还会处理 lockfile，版本完全一致
+
+    策略：
+      1. 优先使用 uv sync --extra webui
+         - uv 自动解析 pyproject.toml 中所有依赖
+         - uv 自动使用 [[tool.uv.index]] 和 [tool.uv.sources] 配置
+           处理 PyTorch CUDA 索引（cu128）
+         - 国内环境通过 UV_INDEX_URL 环境变量设置阿里云镜像
+           （不影响 explicit 索引，torch/torchaudio 仍走 PyTorch CUDA 源）
+      2. 回退到 pip install -e ".[webui]"
+         - 手动传递 --extra-index-url 处理 PyTorch CUDA
+         - 国内环境使用 --index-url 设置阿里云镜像
+
+    返回：
+        True 如果安装成功，False 如果失败
+    """
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    pyproject_path = os.path.join(project_root, "pyproject.toml")
+
+    if not os.path.isfile(pyproject_path):
+        print(f"  ✗ 找不到 pyproject.toml: {pyproject_path}")
+        print(f"  请确保在 IndexTTS-2 项目根目录下运行此脚本")
+        return False
+
+    # 策略 1: uv sync（推荐，自动处理所有依赖解析）
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return _install_with_uv_sync(project_root)
+
+    # 策略 2: pip install -e .（回退方案）
+    return _install_with_pip(project_root)
+
+
+def _install_with_uv_sync(project_root):
+    """
+    使用 uv sync 安装项目依赖。
+
+    uv sync 会读取 pyproject.toml 并安装所有依赖，包括：
+      - 核心依赖（accelerate, librosa, transformers 等）
+      - 平台条件依赖（wetext/WeTextProcessing 自动选择）
+      - PyTorch CUDA 版本（通过 [[tool.uv.index]] + [tool.uv.sources]）
+      - 可选依赖（--extra webui 安装 gradio）
+
+    国内环境通过 UV_INDEX_URL 环境变量加速非 PyTorch 包的下载。
+    """
+    cmd = ["uv", "sync", "--extra", "webui"]
+    env = os.environ.copy()
+
+    if G_IN_CHINA:
+        # 设置默认镜像源为阿里云
+        # pyproject.toml 中的 [[tool.uv.index]] explicit=true 索引不受影响
+        # torch/torchaudio 仍走 PyTorch CUDA 源 (cu128)
+        env["UV_INDEX_URL"] = "https://mirrors.aliyun.com/pypi/simple/"
+
+    print(f"  使用 uv sync 安装项目依赖 (更快)")
+    print(f"  执行: {' '.join(cmd)}")
+    if G_IN_CHINA:
+        print(f"  镜像源:  UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/")
+    print(f"  开始安装...")
+    print(f"  {'─' * 52}")
+
+    return _run_subprocess_with_progress(cmd, cwd=project_root, env=env)
+
+
+def _install_with_pip(project_root):
+    """
+    使用 pip install -e . 安装项目依赖。
+
+    pip 不识别 pyproject.toml 中的 [[tool.uv.index]] 配置，
+    需要手动传递 --extra-index-url 处理 PyTorch CUDA。
+
+    分两步：
+      1. 安装 torch/torchaudio（从 PyTorch CUDA 源）
+      2. pip install -e ".[webui]"（安装完整项目）
+    """
+    pip_cmd = [G_PYTHON_EXECUTABLE, "-m", "pip", "install"]
+
+    # 构建基础镜像参数
+    base_args = []
+    if G_IN_CHINA:
+        base_args.extend([
+            "--index-url", "https://mirrors.aliyun.com/pypi/simple/",
+            "--trusted-host", "mirrors.aliyun.com",
+        ])
+
+    # PyTorch CUDA 源（优先使用 GPU 检测推荐的，否则默认 cu128）
+    torch_index_url = G_RECOMMENDED_TORCH_INDEX or "https://download.pytorch.org/whl/cu128"
+
+    print(f"  使用 pip install 安装项目依赖")
+
+    # Step 1: 安装 PyTorch CUDA 包
+    torch_cmd = pip_cmd + base_args + [
+        "--extra-index-url", torch_index_url,
+        "torch", "torchaudio",
+    ]
+    print(f"  [1/2] 安装 PyTorch CUDA 包")
+    print(f"  执行: {' '.join(torch_cmd)}")
+    print(f"  开始安装...")
+    print(f"  {'─' * 52}")
+
+    step1_ok = _run_subprocess_with_progress(torch_cmd, cwd=project_root)
+    if not step1_ok:
+        print(f"  ⚠ PyTorch 安装可能失败，将继续安装其余依赖...")
+
+    # Step 2: 安装完整项目（含 webui 可选依赖）
+    project_cmd = pip_cmd + base_args + [
+        "--extra-index-url", torch_index_url,
+        "-e", ".[webui]",
+    ]
+    print(f"\n  [2/2] 安装完整项目依赖")
+    print(f"  执行: {' '.join(project_cmd)}")
+    print(f"  开始安装...")
+    print(f"  {'─' * 52}")
+
+    step2_ok = _run_subprocess_with_progress(project_cmd, cwd=project_root)
+
+    if step2_ok:
+        print(f"  ✓ 项目依赖安装完成 (pip install)")
+        return True
+    else:
+        print(f"  ✗ 项目依赖安装失败")
         return False
 
 
 def install_missing_packages():
     """
     安装所有缺失的依赖包。
-    如果存在虚拟环境，则在虚拟环境中安装。
-    根据 G_IN_CHINA 决定是否使用阿里云镜像源。
-    PyTorch 相关包使用推荐的 CUDA 源安装。
+
+    不再逐个安装包，而是从 pyproject.toml 安装完整项目依赖。
+    这确保了所有依赖（包括平台条件依赖和可选依赖）都被正确安装。
     """
     if not G_MISSING_PACKAGES:
         print("[依赖包安装]")
@@ -1113,6 +1158,8 @@ def install_missing_packages():
     print(f"  发现 {len(G_MISSING_PACKAGES)} 个缺失的包:")
     for pkg in G_MISSING_PACKAGES:
         print(f"    - {pkg}")
+    print()
+    print(f"  将从 pyproject.toml 安装完整项目依赖（含 webui 可选依赖）")
     print()
 
     # 确认安装环境
@@ -1130,11 +1177,7 @@ def install_missing_packages():
     else:
         print(f"  镜像源:    PyPI 官方 (pypi.org)")
 
-    # 分离 PyTorch CUDA 包和普通包
-    torch_pkgs = [p for p in G_MISSING_PACKAGES if p in PYTORCH_CUDA_PACKAGES]
-    other_pkgs = [p for p in G_MISSING_PACKAGES if p not in PYTORCH_CUDA_PACKAGES]
-
-    if torch_pkgs and G_RECOMMENDED_CUDA:
+    if G_RECOMMENDED_CUDA:
         print(f"  PyTorch CUDA 源: {G_RECOMMENDED_TORCH_INDEX} ({G_RECOMMENDED_CUDA})")
     print()
 
@@ -1144,22 +1187,8 @@ def install_missing_packages():
         print()
         return False
 
-    # 执行安装：先装 PyTorch CUDA 包，再装普通包
-    success = True
-    failed_pkgs = []
-
-    if torch_pkgs:
-        print(f"\n  [1/{(1 if other_pkgs else 0) + 1}] 安装 PyTorch CUDA 包: {' '.join(torch_pkgs)}")
-        if not install_packages_with_progress(torch_pkgs, use_torch_index=True):
-            success = False
-            failed_pkgs.extend(torch_pkgs)
-
-    if other_pkgs:
-        step = 1 if not torch_pkgs else 2
-        print(f"\n  [{step}/2] 安装其他包: {' '.join(other_pkgs)}")
-        if not install_packages_with_progress(other_pkgs, use_torch_index=False):
-            success = False
-            failed_pkgs.extend(other_pkgs)
+    # 执行安装（从 pyproject.toml 安装完整项目）
+    success = install_project_from_pyproject()
 
     # 无论成功失败，都重新检测包状态（部分包可能已安装）
     detect_packages()
@@ -1172,7 +1201,7 @@ def install_missing_packages():
     print()
 
     if not success:
-        print(f"  ⚠ 以下包安装失败: {' '.join(failed_pkgs)}")
+        print(f"  ⚠ 部分包可能安装失败，请检查上方输出")
         print()
 
     return success
@@ -1604,10 +1633,16 @@ def _download_from_modelscope_file(model_id: str, file_path: str, local_path: st
         raise RuntimeError(f"ModelScope 下载失败: {e}")
 
 
-def _download_file_http(url: str, local_path: str, timeout: int = 300,
-       max_retries: int = 3, chunk_size: int = 65536) -> bool:
+def _download_file_http(url: str, local_path: str, timeout: int = 600,
+       max_retries: int = 3, chunk_size: int = 262144) -> bool:
     """
     通过 HTTP 下载单个文件，支持断点续传、自动重试和进度显示。
+
+    优化：
+      - chunk_size: 256KB（减少系统调用次数）
+      - 进度刷新间隔: 0.5 秒（减少 I/O）
+      - 超时: 600 秒（大文件下载）
+      - 缓冲区批量写入磁盘
     """
     import time as _time
     import ssl
@@ -1656,6 +1691,8 @@ def _download_file_http(url: str, local_path: str, timeout: int = 300,
 
                 downloaded = resume_pos
                 start_time = _time.time()
+                last_print_time = start_time
+                buffer = bytearray()
 
                 # 以追加模式写入（支持断点续传）
                 mode = "ab" if resume_pos > 0 and status == 206 else "wb"
@@ -1664,21 +1701,40 @@ def _download_file_http(url: str, local_path: str, timeout: int = 300,
                         chunk = resp.read(chunk_size)
                         if not chunk:
                             break
-                        f.write(chunk)
+                        buffer.extend(chunk)
                         downloaded += len(chunk)
 
-                        # 显示进度
-                        elapsed = max(_time.time() - start_time, 0.1)
-                        speed = (downloaded - resume_pos) / elapsed / 1024 / 1024
-                        if total > 0:
-                            pct = downloaded / total * 100
-                            print(f"\r     {pct:5.1f}% ({fmt_size(downloaded)}/{fmt_size(total)}) "
-                                  f"{speed:.1f} MB/s", end="", flush=True)
-                        else:
-                            print(f"\r     {fmt_size(downloaded)} {speed:.1f} MB/s",
-                                  end="", flush=True)
+                        # 每 0.5 秒刷新一次进度，减少 I/O
+                        now = _time.time()
+                        if now - last_print_time >= 0.5:
+                            elapsed = max(now - start_time, 0.1)
+                            speed = (downloaded - resume_pos) / elapsed / 1024 / 1024
+                            if total > 0:
+                                pct = downloaded / total * 100
+                                print(f"\r     {pct:5.1f}% ({fmt_size(downloaded)}/{fmt_size(total)}) "
+                                f"{speed:.1f} MB/s", end="", flush=True)
+                            else:
+                                print(f"\r     {fmt_size(downloaded)} {speed:.1f} MB/s",
+                                end="", flush=True)
+                            last_print_time = now
 
-                print()  # 换行
+                        # 缓冲区超过 1MB 时批量写入磁盘
+                        if len(buffer) >= 1048576:
+                            f.write(buffer)
+                            buffer.clear()
+
+                # 写入剩余数据
+                if buffer:
+                    f.write(buffer)
+
+                # 最终进度显示
+                elapsed = max(_time.time() - start_time, 0.1)
+                speed = (downloaded - resume_pos) / elapsed / 1024 / 1024
+                if total > 0:
+                    print(f"\r     100.0% ({fmt_size(downloaded)}/{fmt_size(total)}) {speed:.1f} MB/s")
+                else:
+                    print(f"\r     {fmt_size(downloaded)} {speed:.1f} MB/s")
+
                 os.replace(tmp_path, local_path)
                 last_error = None
                 break  # 成功
@@ -1844,7 +1900,7 @@ def download_bigvgan(cache_dir: str, force: bool = False) -> bool:
     """
     下载 BigVGAN vocoder 多文件（~150MB）。
 
-    无 ModelScope 映射，直接 HTTP 下载。
+    优化：使用 huggingface_hub 下载（支持断点续传和自动重试）
     """
     bigvgan_dir = os.path.join(cache_dir, "bigvgan")
     os.makedirs(bigvgan_dir, exist_ok=True)
@@ -1871,20 +1927,64 @@ def download_bigvgan(cache_dir: str, force: bool = False) -> bool:
     repo_id = "nvidia/bigvgan_v2_22khz_80band_256x"
     all_ok = True
 
-    for hf_name, local_name, min_size in files:
-        local_path = os.path.join(bigvgan_dir, local_name)
-        if not force and os.path.isfile(local_path) and os.path.getsize(local_path) >= min_size:
-            print(f"     ✓ {local_name} 已存在，跳过")
-            continue
+    # 设置 HF_ENDPOINT 为 hf-mirror（国内加速）
+    old_endpoint = os.environ.get("HF_ENDPOINT")
+    if G_IN_CHINA:
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+        print(f"     使用 hf-mirror.com 加速下载")
 
-        print(f"     ⬇ {local_name} ...")
-        success = download_single_file_from_hf(repo_id, hf_name, local_path)
-        if success:
-            size = os.path.getsize(local_path)
-            print(f"     ✓ {local_name} ({fmt_size(size)})")
-        else:
-            print(f"     ✗ {local_name} 下载失败")
-            all_ok = False
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        print(f"     ✗ huggingface_hub 未安装，回退到 HTTP 下载")
+        # 回退到 HTTP 下载
+        for hf_name, local_name, min_size in files:
+            local_path = os.path.join(bigvgan_dir, local_name)
+            if not force and os.path.isfile(local_path) and os.path.getsize(local_path) >= min_size:
+                print(f"     ✓ {local_name} 已存在，跳过")
+                continue
+
+            print(f"     ⬇ {local_name} ...")
+            success = download_single_file_from_hf(repo_id, hf_name, local_path)
+            if success:
+                size = os.path.getsize(local_path)
+                print(f"     ✓ {local_name} ({fmt_size(size)})")
+            else:
+                print(f"     ✗ {local_name} 下载失败")
+                all_ok = False
+    else:
+        # 使用 huggingface_hub 下载
+        for hf_name, local_name, min_size in files:
+            local_path = os.path.join(bigvgan_dir, local_name)
+            if not force and os.path.isfile(local_path) and os.path.getsize(local_path) >= min_size:
+                print(f"     ✓ {local_name} 已存在，跳过")
+                continue
+
+            print(f"     ⬇ {local_name} ...")
+            try:
+                tmp_path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename=hf_name,
+                    cache_dir=os.path.join(cache_dir, ".hf_cache"),
+                    local_dir=bigvgan_dir,
+                    local_dir_use_symlinks=False,
+                )
+                # hf_hub_download 会下载到 local_dir，检查文件是否存在
+                if os.path.isfile(local_path):
+                    size = os.path.getsize(local_path)
+                    print(f"     ✓ {local_name} ({fmt_size(size)})")
+                else:
+                    print(f"     ✗ {local_name} 下载失败")
+                    all_ok = False
+            except Exception as e:
+                print(f"     ✗ {local_name} 下载失败: {e}")
+                all_ok = False
+
+    # 恢复环境变量
+    if old_endpoint is not None:
+        os.environ["HF_ENDPOINT"] = old_endpoint
+    elif "HF_ENDPOINT" in os.environ:
+        del os.environ["HF_ENDPOINT"]
 
     if all_ok:
         size = _get_dir_size(bigvgan_dir)
