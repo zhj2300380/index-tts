@@ -119,6 +119,43 @@ def get_venv_python_path():
         return os.path.join(venv_path, "bin", "python")
 
 
+def ensure_pip_in_venv(venv_python: str) -> bool:
+    """
+    确保虚拟环境中安装了 pip。
+
+    uv venv 默认不带 pip，需要手动安装。
+    """
+    try:
+        result = subprocess.run(
+            [venv_python, "-m", "pip", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            return True  # pip 已存在
+    except Exception:
+        pass
+
+    print(f"  pip 未安装，正在安装 pip...")
+    try:
+        result = subprocess.run(
+            [venv_python, "-m", "ensurepip", "--default-pip"],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        if result.returncode == 0:
+            print(f"  ✓ pip 安装完成")
+            return True
+        else:
+            print(f"  ensurepip 失败: {result.stderr.strip()}")
+    except Exception as e:
+        print(f"  pip 安装异常: {e}")
+
+    return False
+
+
 def create_virtualenv():
     """
     创建虚拟环境。
@@ -153,6 +190,10 @@ def create_virtualenv():
             )
             if result.returncode == 0:
                 print(f"  ✓ 虚拟环境创建完成 (uv)")
+                # uv venv 默认不带 pip，需要确保 pip 可用
+                venv_python = get_venv_python_path()
+                if os.path.isfile(venv_python):
+                    ensure_pip_in_venv(venv_python)
                 return True
             else:
                 print(f"  uv 创建失败: {result.stderr.strip()}")
