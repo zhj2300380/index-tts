@@ -124,7 +124,9 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
     确保虚拟环境中安装了 pip。
 
     uv venv 默认不带 pip，需要手动安装。
+    使用多种策略确保 pip 可用。
     """
+    # 先检查 pip 是否已存在
     try:
         result = subprocess.run(
             [venv_python, "-m", "pip", "--version"],
@@ -138,6 +140,8 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
         pass
 
     print(f"  pip 未安装，正在安装 pip...")
+
+    # 策略 1: 尝试 ensurepip
     try:
         result = subprocess.run(
             [venv_python, "-m", "ensurepip", "--default-pip"],
@@ -146,13 +150,51 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
             timeout=60
         )
         if result.returncode == 0:
-            print(f"  ✓ pip 安装完成")
+            print(f"  ✓ pip 安装完成 (ensurepip)")
             return True
         else:
-            print(f"  ensurepip 失败: {result.stderr.strip()}")
+            stderr = result.stderr.strip()
+            if "No module named ensurepip" in stderr:
+                print(f"  ensurepip 不可用，尝试 get-pip.py...")
+            else:
+                print(f"  ensurepip 失败: {stderr}")
+                print(f"  尝试 get-pip.py...")
     except Exception as e:
-        print(f"  pip 安装异常: {e}")
+        print(f"  ensurepip 异常: {e}")
+        print(f"  尝试 get-pip.py...")
 
+    # 策略 2: 下载并运行 get-pip.py
+    try:
+        import urllib.request
+        get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
+        get_pip_path = os.path.join(PROJECT_ROOT, ".get-pip.py")
+
+        print(f"  下载 get-pip.py...")
+        urllib.request.urlretrieve(get_pip_url, get_pip_path)
+
+        result = subprocess.run(
+            [venv_python, get_pip_path],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        # 清理临时文件
+        if os.path.exists(get_pip_path):
+            os.remove(get_pip_path)
+
+        if result.returncode == 0:
+            print(f"  ✓ pip 安装完成 (get-pip.py)")
+            return True
+        else:
+            print(f"  get-pip.py 失败: {result.stderr.strip()}")
+    except Exception as e:
+        print(f"  get-pip.py 异常: {e}")
+
+    print(f"  ✗ pip 安装失败")
+    print(f"  请手动安装 pip:")
+    print(f"    curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py")
+    print(f"    {venv_python} get-pip.py")
     return False
 
 
