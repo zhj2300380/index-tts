@@ -1143,23 +1143,20 @@ def _install_with_pip(project_root):
 
 def install_missing_packages():
     """
-    安装所有缺失的依赖包。
+    从 pyproject.toml 安装完整项目依赖。
 
-    不再逐个安装包，而是从 pyproject.toml 安装完整项目依赖。
-    这确保了所有依赖（包括平台条件依赖和可选依赖）都被正确安装。
+    只要没有 --no-install，就始终安装完整项目依赖，
+    确保所有包（含平台条件依赖和可选依赖）都被正确安装。
     """
-    if not G_MISSING_PACKAGES:
-        print("[依赖包安装]")
-        print("  所有依赖包已安装，无需安装")
-        print()
-        return True
-
     print("[依赖包安装]")
-    print(f"  发现 {len(G_MISSING_PACKAGES)} 个缺失的包:")
-    for pkg in G_MISSING_PACKAGES:
-        print(f"    - {pkg}")
-    print()
-    print(f"  将从 pyproject.toml 安装完整项目依赖（含 webui 可选依赖）")
+
+    if G_MISSING_PACKAGES:
+        print(f"  发现 {len(G_MISSING_PACKAGES)} 个缺失的包:")
+        for pkg in G_MISSING_PACKAGES:
+            print(f"    - {pkg}")
+        print()
+
+    print(f"  从 pyproject.toml 安装完整项目依赖（含 webui 可选依赖）")
     print()
 
     # 确认安装环境
