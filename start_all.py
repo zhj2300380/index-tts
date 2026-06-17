@@ -337,6 +337,7 @@ def print_help():
     print("  --skip-examples   不下载示例音频")
     print("  --no-install      不自动安装缺失的包")
     print("  --force           强制重新下载已存在的模型")
+    print("  --auto-download   自动确认所有下载操作，无需用户输入")
     print("  --model-dir DIR   模型存放目录 (默认: ./checkpoints)")
     print("  --examples-dir DIR 示例音频目录 (默认: ./examples)")
     print("  false             非中国大陆网络环境")
@@ -346,6 +347,7 @@ def print_help():
     print("  python start_all.py              # 一键部署（中国大陆）")
     print("  python start_all.py false        # 一键部署（海外）")
     print("  python start_all.py --skip-model # 只创建环境和安装包")
+    print("  python start_all.py --auto-download  # 全自动部署（无需确认）")
     print()
 
 

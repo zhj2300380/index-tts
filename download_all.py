@@ -30,6 +30,7 @@ from pathlib import Path
 
 # --- 网络环境 ---
 G_IN_CHINA = True         # 是否在中国大陆网络环境（默认 true）
+G_AUTO_DOWNLOAD = False   # 是否自动确认所有下载操作（无需用户输入）
 
 # --- 系统信息 ---
 G_OS_NAME = None          # 操作系统名称 (Linux, Windows, Darwin)
@@ -53,6 +54,24 @@ G_USE_HF_HUB = None       # 是否使用 huggingface_hub 下载
 G_MODEL_DIR = None        # 模型存放目录
 G_CACHE_DIR = None        # 实际缓存目录 (model_dir/hf_cache)
 G_EXAMPLES_DIR = None     # 示例音频存放目录
+
+
+def ask_continue(prompt="是否继续? (y/N): "):
+    """
+    询问用户是否继续。
+
+    如果 G_AUTO_DOWNLOAD 为 True，直接返回 True。
+    否则等待用户输入。
+    """
+    if G_AUTO_DOWNLOAD:
+        return True
+
+    try:
+        response = input(f"  {prompt}").strip().lower()
+        return response in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print("\n  ⊘ 用户取消")
+        return False
 
 # --- 硬件信息 ---
 G_RAM_TOTAL = None        # 总内存 (bytes)
@@ -1101,14 +1120,8 @@ def install_missing_packages():
     print()
 
     # 询问用户确认（可以跳过）
-    try:
-        response = input("  是否继续安装? (y/N): ").strip().lower()
-        if response not in ("y", "yes"):
-            print("  ⊘ 用户取消安装")
-            print()
-            return False
-    except (EOFError, KeyboardInterrupt):
-        print("\n  ⊘ 用户取消安装")
+    if not ask_continue("是否继续安装? (y/N): "):
+        print("  ⊘ 用户取消安装")
         print()
         return False
 
@@ -1271,14 +1284,8 @@ def download_main_model(model_dir: str, force: bool = False) -> bool:
     print()
 
     # 询问用户确认
-    try:
-        response = input("  是否继续下载? (y/N): ").strip().lower()
-        if response not in ("y", "yes"):
-            print("  ⊘ 用户取消下载")
-            print()
-            return False
-    except (EOFError, KeyboardInterrupt):
-        print("\n  ⊘ 用户取消下载")
+    if not ask_continue("是否继续下载? (y/N): "):
+        print("  ⊘ 用户取消下载")
         print()
         return False
 
@@ -1956,14 +1963,8 @@ def download_aux_models(cache_dir: str, force: bool = False) -> bool:
     os.makedirs(cache_dir, exist_ok=True)
 
     # 询问用户确认
-    try:
-        response = input("  是否继续下载? (y/N): ").strip().lower()
-        if response not in ("y", "yes"):
-            print("  ⊘ 用户取消下载")
-            print()
-            return False
-    except (EOFError, KeyboardInterrupt):
-        print("\n  ⊘ 用户取消下载")
+    if not ask_continue("是否继续下载? (y/N): "):
+        print("  ⊘ 用户取消下载")
         print()
         return False
 
@@ -2063,14 +2064,8 @@ def download_example_audio(examples_dir: str, force: bool = False) -> bool:
     print()
 
     # 询问用户确认
-    try:
-        response = input("  是否继续下载? (y/N): ").strip().lower()
-        if response not in ("y", "yes"):
-            print("  ⊘ 用户取消下载")
-            print()
-            return False
-    except (EOFError, KeyboardInterrupt):
-        print("\n  ⊘ 用户取消下载")
+    if not ask_continue("是否继续下载? (y/N): "):
+        print("  ⊘ 用户取消下载")
         print()
         return False
 
@@ -2197,6 +2192,11 @@ def main():
         default="./examples",
         help="示例音频存放目录 (默认: ./examples)",
     )
+    parser.add_argument(
+        "--auto-download",
+        action="store_true",
+        help="自动确认所有下载操作，无需用户输入",
+    )
     args = parser.parse_args()
 
     # 根据参数设置 G_IN_CHINA
@@ -2206,6 +2206,10 @@ def main():
             G_IN_CHINA = False
         elif val in ("true", "1", "yes"):
             G_IN_CHINA = True
+
+    # 设置自动下载模式
+    global G_AUTO_DOWNLOAD
+    G_AUTO_DOWNLOAD = args.auto_download
 
     # 设置模型目录
     global G_MODEL_DIR, G_CACHE_DIR
