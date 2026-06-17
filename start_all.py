@@ -85,11 +85,24 @@ def check_python_version():
 
 
 def is_in_virtualenv():
-    """检查当前是否在虚拟环境中"""
+    """检查当前是否在虚拟环境中（用于警告用户）"""
     return (
         hasattr(sys, "real_prefix") or
         (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)
     )
+
+
+def is_in_project_venv():
+    """
+    检查当前 Python 是否位于项目根目录的 .venv 中。
+
+    只认可项目自己的虚拟环境，其他项目的虚拟环境一律视为无效。
+    """
+    venv_path = os.path.join(PROJECT_ROOT, VENV_NAME)
+    executable = os.path.realpath(sys.executable)
+
+    # 检查当前 Python 是否在项目的 .venv 目录下
+    return executable.startswith(os.path.realpath(venv_path))
 
 
 def get_venv_python_path():
@@ -259,18 +272,22 @@ def main():
 
     # 步骤 2: 检查/创建虚拟环境
     print("[步骤 2/4] 检查虚拟环境")
-    if not is_in_virtualenv():
-        print(f"  当前不在虚拟环境中")
-        print()
+    venv_python = get_venv_python_path()
 
-        # 创建虚拟环境
+    if is_in_project_venv():
+        print(f"  ✓ 已在项目虚拟环境中")
+        print(f"    Python: {sys.executable}")
+        print()
+    else:
+        if is_in_virtualenv():
+            print(f"  ⚠ 当前在其他项目的虚拟环境中，将切换到本项目虚拟环境")
+            print(f"    当前 Python: {sys.executable}")
+        else:
+            print(f"  当前使用系统 Python")
+
+        # 确保虚拟环境存在
         if not create_virtualenv():
             sys.exit(1)
-
-        print()
-
-        # 获取虚拟环境 Python 路径
-        venv_python = get_venv_python_path()
 
         if not os.path.isfile(venv_python):
             print(f"  ✗ 虚拟环境中的 Python 不存在: {venv_python}")
@@ -281,10 +298,6 @@ def main():
         # 如果执行到这里，说明 os.execv 失败（不应该发生）
         print(f"  ✗ 切换到虚拟环境失败")
         sys.exit(1)
-    else:
-        print(f"  ✓ 已在虚拟环境中")
-        print(f"    Python: {sys.executable}")
-        print()
 
     # 步骤 3: 检查 download_all.py
     print("[步骤 3/4] 检查下载脚本")
