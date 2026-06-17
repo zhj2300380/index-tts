@@ -862,12 +862,11 @@ def print_env_info():
 
     # --- 警告信息 ---
     if G_MISSING_PACKAGES:
-        print("[警告] 以下包未安装，可能影响部分下载功能:")
+        print("[警告] 以下包未安装，将在后续步骤中自动安装:")
         for pkg in G_MISSING_PACKAGES:
             print(f"  - {pkg}")
         print()
-        print("  建议安装:")
-        print(f"  pip install {' '.join(G_MISSING_PACKAGES)}")
+        print("  如果不需要自动安装，请使用 --no-install 参数跳过")
         print()
 
     print_separator()
@@ -1167,6 +1166,18 @@ def download_main_model(model_dir: str, force: bool = False) -> bool:
         True 如果下载成功
     """
     import time as _time
+
+    # 确保 huggingface_hub 已安装（下载主模型必需）
+    if not G_USE_HF_HUB:
+        print("[依赖包检查]")
+        print("  huggingface_hub 未安装，正在安装...")
+        if install_missing_packages():
+            print("  ✓ huggingface_hub 安装完成")
+            print()
+        else:
+            print("  ✗ huggingface_hub 安装失败，无法下载主模型")
+            print()
+            return False
 
     model_dir = os.path.abspath(model_dir)
     os.makedirs(model_dir, exist_ok=True)
