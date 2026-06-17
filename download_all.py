@@ -632,12 +632,13 @@ ARCH_MIN_CUDA = {
 }
 
 # 可用的 PyTorch CUDA 构建版本（从最新到最旧）
+# 格式: (cuda_tag, torch_version, official_url, aliyun_url)
 AVAILABLE_TORCH_CUDA = [
-    ("cu128", "2.8", "https://download.pytorch.org/whl/cu128"),
-    ("cu126", "2.7", "https://download.pytorch.org/whl/cu126"),
-    ("cu124", "2.6", "https://download.pytorch.org/whl/cu124"),
-    ("cu121", "2.4", "https://download.pytorch.org/whl/cu121"),
-    ("cu118", "2.4", "https://download.pytorch.org/whl/cu118"),
+    ("cu128", "2.8", "https://download.pytorch.org/whl/cu128", "https://mirrors.aliyun.com/pytorch-wheels/cu128"),
+    ("cu126", "2.7", "https://download.pytorch.org/whl/cu126", "https://mirrors.aliyun.com/pytorch-wheels/cu126"),
+    ("cu124", "2.6", "https://download.pytorch.org/whl/cu124", "https://mirrors.aliyun.com/pytorch-wheels/cu124"),
+    ("cu121", "2.4", "https://download.pytorch.org/whl/cu121", "https://mirrors.aliyun.com/pytorch-wheels/cu121"),
+    ("cu118", "2.4", "https://download.pytorch.org/whl/cu118", "https://mirrors.aliyun.com/pytorch-wheels/cu118"),
 ]
 
 
@@ -664,7 +665,7 @@ def _recommend_torch_cuda(gpu_arch: str, driver_version: str):
 
     返回: (cuda_tag, torch_index_url)
         cuda_tag: 如 "cu128", "cu124"
-        torch_index_url: PyTorch 安装源 URL
+        torch_index_url: PyTorch 安装源 URL（国内使用阿里云镜像）
     """
     driver_major = _parse_driver_major(driver_version)
 
@@ -679,7 +680,7 @@ def _recommend_torch_cuda(gpu_arch: str, driver_version: str):
     min_cuda = ARCH_MIN_CUDA.get(gpu_arch, "11.0")
 
     # 从可用版本中选择：最高但不超过驱动支持的版本
-    for cuda_tag, torch_ver, index_url in AVAILABLE_TORCH_CUDA:
+    for cuda_tag, torch_ver, official_url, aliyun_url in AVAILABLE_TORCH_CUDA:
         # 解析 cuda_tag: "cu128" → "12.8", "cu118" → "11.8"
         cuda_num = cuda_tag.replace("cu", "")
         cuda_major = int(cuda_num[:-1])
@@ -690,10 +691,17 @@ def _recommend_torch_cuda(gpu_arch: str, driver_version: str):
         if _parse_cuda_version(cuda_ver_str) <= _parse_cuda_version(max_cuda):
             # 检查 GPU 架构是否支持这个 CUDA 版本
             if _parse_cuda_version(cuda_ver_str) >= _parse_cuda_version(min_cuda):
-                return cuda_tag, index_url
+                # 国内使用阿里云镜像，海外使用官方源
+                if G_IN_CHINA:
+                    return cuda_tag, aliyun_url
+                else:
+                    return cuda_tag, official_url
 
     # 如果找不到完美匹配，使用 cu118（最广泛兼容）
-    return "cu118", AVAILABLE_TORCH_CUDA[-1][2]
+    if G_IN_CHINA:
+        return "cu118", AVAILABLE_TORCH_CUDA[-1][3]
+    else:
+        return "cu118", AVAILABLE_TORCH_CUDA[-1][2]
 
 
 # ============================================================================
