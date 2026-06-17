@@ -96,13 +96,17 @@ def is_in_project_venv():
     """
     检查当前 Python 是否位于项目根目录的 .venv 中。
 
+    使用 sys.prefix 判断，因为 venv 中的 python 可能是系统 Python 的软链接，
+    os.path.realpath 会解析到系统路径导致误判。
+
     只认可项目自己的虚拟环境，其他项目的虚拟环境一律视为无效。
     """
-    venv_path = os.path.join(PROJECT_ROOT, VENV_NAME)
-    executable = os.path.realpath(sys.executable)
+    venv_path = os.path.realpath(os.path.join(PROJECT_ROOT, VENV_NAME))
 
-    # 检查当前 Python 是否在项目的 .venv 目录下
-    return executable.startswith(os.path.realpath(venv_path))
+    # sys.prefix 在虚拟环境中指向虚拟环境目录
+    current_prefix = os.path.realpath(sys.prefix)
+
+    return current_prefix == venv_path
 
 
 def get_venv_python_path():
