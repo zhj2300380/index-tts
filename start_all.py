@@ -163,15 +163,34 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
         print(f"  ensurepip 异常: {e}")
         print(f"  尝试 get-pip.py...")
 
-    # 策略 2: 下载并运行 get-pip.py
+    # 策略 2: 下载并运行 get-pip.py（多源回退）
+    get_pip_sources = [
+        ("bootstrap.pypa.io", "https://bootstrap.pypa.io/get-pip.py"),
+        ("阿里云", "https://mirrors.aliyun.com/pypi/packages/get-pip.py"),
+        ("清华大学", "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/get-pip.py"),
+    ]
+
+    get_pip_path = os.path.join(PROJECT_ROOT, ".get-pip.py")
+    downloaded = False
+
+    for source_name, get_pip_url in get_pip_sources:
+        try:
+            import urllib.request
+            print(f"  从 {source_name} 下载 get-pip.py...")
+            with urllib.request.urlopen(get_pip_url, timeout=30) as response:
+                with open(get_pip_path, "wb") as f:
+                    f.write(response.read())
+            downloaded = True
+            print(f"  ✓ 下载完成")
+            break
+        except Exception:
+            continue
+
+    if not downloaded:
+        print(f"  ✗ 所有 get-pip.py 源均不可用")
+        return False
+
     try:
-        import urllib.request
-        get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
-        get_pip_path = os.path.join(PROJECT_ROOT, ".get-pip.py")
-
-        print(f"  下载 get-pip.py...")
-        urllib.request.urlretrieve(get_pip_url, get_pip_path)
-
         result = subprocess.run(
             [venv_python, get_pip_path],
             capture_output=True,
@@ -190,6 +209,9 @@ def ensure_pip_in_venv(venv_python: str) -> bool:
             print(f"  get-pip.py 失败: {result.stderr.strip()}")
     except Exception as e:
         print(f"  get-pip.py 异常: {e}")
+        # 清理临时文件
+        if os.path.exists(get_pip_path):
+            os.remove(get_pip_path)
 
     print(f"  ✗ pip 安装失败")
     print(f"  请手动安装 pip:")
