@@ -1104,27 +1104,33 @@ def install_missing_packages():
 
     # 执行安装：先装 PyTorch CUDA 包，再装普通包
     success = True
+    failed_pkgs = []
 
     if torch_pkgs:
         print(f"\n  [1/{(1 if other_pkgs else 0) + 1}] 安装 PyTorch CUDA 包: {' '.join(torch_pkgs)}")
         if not install_packages_with_progress(torch_pkgs, use_torch_index=True):
             success = False
+            failed_pkgs.extend(torch_pkgs)
 
     if other_pkgs:
         step = 1 if not torch_pkgs else 2
         print(f"\n  [{step}/2] 安装其他包: {' '.join(other_pkgs)}")
         if not install_packages_with_progress(other_pkgs, use_torch_index=False):
             success = False
+            failed_pkgs.extend(other_pkgs)
 
-    if success:
-        # 重新检测包状态
-        detect_packages()
-        print()
-        print("  安装完成，重新检测包状态:")
-        for pkg_name, info in G_PACKAGES.items():
-            status = "✓" if info["installed"] else "✗"
-            version = str(info["version"]) if info["version"] else "-"
-            print(f"    {pkg_name:<20} {status:<8} {version:<20}")
+    # 无论成功失败，都重新检测包状态（部分包可能已安装）
+    detect_packages()
+    print()
+    print("  安装完成，重新检测包状态:")
+    for pkg_name, info in G_PACKAGES.items():
+        status = "✓" if info["installed"] else "✗"
+        version = str(info["version"]) if info["version"] else "-"
+        print(f"    {pkg_name:<20} {status:<8} {version:<20}")
+    print()
+
+    if not success:
+        print(f"  ⚠ 以下包安装失败: {' '.join(failed_pkgs)}")
         print()
 
     return success
