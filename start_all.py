@@ -232,10 +232,6 @@ def create_virtualenv():
             )
             if result.returncode == 0:
                 print(f"  ✓ 虚拟环境创建完成 (uv)")
-                # uv venv 默认不带 pip，需要确保 pip 可用
-                venv_python = get_venv_python_path()
-                if os.path.isfile(venv_python):
-                    ensure_pip_in_venv(venv_python)
                 return True
             else:
                 print(f"  uv 创建失败: {result.stderr.strip()}")
@@ -256,10 +252,6 @@ def create_virtualenv():
         builder = venv.EnvBuilder(with_pip=True, symlinks=False)
         builder.create(venv_path)
         print(f"  ✓ 虚拟环境创建完成 (venv)")
-        # 统一确保 pip 可用（某些最小化系统可能 pip 未正确安装）
-        venv_python = get_venv_python_path()
-        if os.path.isfile(venv_python):
-            ensure_pip_in_venv(venv_python)
         return True
     except Exception as e:
         print(f"  ✗ 虚拟环境创建失败: {e}")
@@ -354,15 +346,15 @@ def main():
 
     print_banner()
 
-    # 步骤 1: 检查 Python 版本
-    print("[步骤 1/4] 检查 Python 版本")
+    # 步骤 1/5: 检查 Python 版本
+    print("[步骤 1/5] 检查 Python 版本")
     if not check_python_version():
         sys.exit(1)
     print(f"  ✓ Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} 符合要求")
     print()
 
-    # 步骤 2: 检查/创建虚拟环境
-    print("[步骤 2/4] 检查虚拟环境")
+    # 步骤 2/5: 检查/创建虚拟环境
+    print("[步骤 2/5] 检查虚拟环境")
     venv_python = get_venv_python_path()
 
     if is_in_project_venv():
@@ -390,8 +382,16 @@ def main():
         print(f"  ✗ 切换到虚拟环境失败")
         sys.exit(1)
 
-    # 步骤 3: 检查 download_all.py
-    print("[步骤 3/4] 检查下载脚本")
+    # 步骤 3/5: 确保 pip 可用
+    print("[步骤 3/5] 检查 pip")
+    if not ensure_pip_in_venv(sys.executable):
+        print(f"  ✗ pip 不可用，无法继续")
+        sys.exit(1)
+    print(f"  ✓ pip 可用")
+    print()
+
+    # 步骤 4/5: 检查 download_all.py
+    print("[步骤 4/5] 检查下载脚本")
     download_script = os.path.join(PROJECT_ROOT, "download_all.py")
     if not os.path.isfile(download_script):
         print(f"  ✗ 找不到 download_all.py")
@@ -399,8 +399,8 @@ def main():
     print(f"  ✓ download_all.py 存在")
     print()
 
-    # 步骤 4: 调用 download_all.py
-    print("[步骤 4/4] 开始部署")
+    # 步骤 5/5: 调用 download_all.py
+    print("[步骤 5/5] 开始部署")
     print()
 
     # 传递所有命令行参数给 download_all.py
