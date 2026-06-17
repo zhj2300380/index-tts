@@ -880,40 +880,67 @@ def print_env_info():
 def get_pip_command():
     """
     获取当前 Python 环境对应的 pip 命令。
-    如果存在虚拟环境，使用虚拟环境中的 pip。
+
+    策略：
+      1. 优先使用 uv pip（更快）
+      2. 回退到 python -m pip
+
+    返回:
+        (command: list, is_uv: bool)
+        command: pip 命令列表
+        is_uv: 是否使用 uv
     """
-    # 优先使用 python -m pip（最可靠，一定对应当前 Python）
-    return [G_PYTHON_EXECUTABLE, "-m", "pip"]
+    # 检查 uv 是否可用
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return ["uv", "pip", "--python", G_PYTHON_EXECUTABLE], True
+
+    # 回退到 python -m pip
+    return [G_PYTHON_EXECUTABLE, "-m", "pip"], False
 
 
 # PyTorch 相关包（需要从专门的 CUDA 源安装）
 PYTORCH_CUDA_PACKAGES = {"torch", "torchaudio", "torchvision"}
 
 
-def get_pip_install_args(package_names, upgrade=False, use_torch_index=False):
+def get_pip_install_args(package_names, upgrade=False, use_torch_index=False, is_uv=False):
     """
     构建 pip install 命令参数。
     根据 G_IN_CHINA 决定是否使用阿里云镜像源。
     如果 use_torch_index=True，添加 PyTorch CUDA 源。
+    如果 is_uv=True，使用 uv 的参数格式。
     """
     args = ["install"]
     if upgrade:
         args.append("--upgrade")
 
     if G_IN_CHINA:
-        args.extend([
-            "--index-url",
-            "https://mirrors.aliyun.com/pypi/simple/",
-            "--trusted-host",
-            "mirrors.aliyun.com",
-        ])
+        if is_uv:
+            # uv 使用 --index-url 和 --index-extra-url
+            args.extend([
+                "--index-url",
+                "https://mirrors.aliyun.com/pypi/simple/",
+            ])
+        else:
+            args.extend([
+                "--index-url",
+                "https://mirrors.aliyun.com/pypi/simple/",
+                "--trusted-host",
+                "mirrors.aliyun.com",
+            ])
 
     # 如果需要 PyTorch CUDA 源
     if use_torch_index and G_RECOMMENDED_TORCH_INDEX:
-        args.extend([
-            "--extra-index-url",
-            G_RECOMMENDED_TORCH_INDEX,
-        ])
+        if is_uv:
+            args.extend([
+                "--index-extra-url",
+                G_RECOMMENDED_TORCH_INDEX,
+            ])
+        else:
+            args.extend([
+                "--extra-index-url",
+                G_RECOMMENDED_TORCH_INDEX,
+            ])
 
     args.extend(package_names)
     return args
@@ -924,6 +951,8 @@ def install_packages_with_progress(package_names, upgrade=False, use_torch_index
     安装包并显示实时进度。
 
     策略：
+      - 优先使用 uv pip（更快）
+      - 回退到 python -m pip
       - 实时输出 pip 的每一行日志（用户可以看到正在做什么）
       - 每行前面添加时间戳和进度指示
       - 如果超过 60 秒没有新输出，显示警告提示
@@ -938,9 +967,14 @@ def install_packages_with_progress(package_names, upgrade=False, use_torch_index
     """
     import time as _time
 
-    pip_cmd = get_pip_command()
-    install_args = get_pip_install_args(package_names, upgrade=upgrade, use_torch_index=use_torch_index)
+    pip_cmd, is_uv = get_pip_command()
+    install_args = get_pip_install_args(package_names, upgrade=upgrade, use_torch_index=use_torch_index, is_uv=is_uv)
     full_cmd = pip_cmd + install_args
+
+    if is_uv:
+        print(f"  使用 uv pip 安装 (更快)")
+    else:
+        print(f"  使用 python -m pip 安装")
 
     print(f"  执行: {' '.join(full_cmd)}")
     print(f"  开始安装 {len(package_names)} 个包...")
@@ -1883,6 +1917,17 @@ def download_aux_models(cache_dir: str, force: bool = False) -> bool:
     返回：
         True 如果全部下载成功
     """
+    # 确保 modelscope 已安装（辅助模型下载必需）
+    if not G_USE_MODELSCOPE:
+        print("[依赖包检查]")
+        print("  modelscope 未安装，正在安装...")
+        if install_missing_packages():
+            print("  ✓ modelscope 安装完成")
+            print()
+        else:
+            print("  ✗ modelscope 安装失败，部分模型可能无法下载")
+            print()
+
     print()
     print("[辅助模型下载]")
     print(f"  目标目录: {cache_dir}")
