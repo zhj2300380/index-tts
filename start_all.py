@@ -191,8 +191,8 @@ def activate_and_restart(venv_python: str):
     print(f"  切换到虚拟环境 Python: {venv_python}")
     print()
 
-    # 构建新的命令行
-    new_argv = [venv_python] + sys.argv[1:]
+    # 构建新的命令行（sys.argv[0] 是脚本路径，必须保留）
+    new_argv = [venv_python] + sys.argv
 
     print(f"  重新执行: {' '.join(new_argv)}")
     print()
