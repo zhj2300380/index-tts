@@ -944,6 +944,8 @@ def get_pip_install_args(package_names, upgrade=False, use_torch_index=False, is
             args.extend([
                 "--extra-index-url",
                 G_RECOMMENDED_TORCH_INDEX,
+                "--index-strategy",
+                "unsafe-best-match",
             ])
         else:
             args.extend([
